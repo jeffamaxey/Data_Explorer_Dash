@@ -4,8 +4,11 @@ import dash
 from dash import dcc, html, dash_table
 from dash.exceptions import PreventUpdate
 from dash.dependencies import Input, Output, State
+import plotly.graph_objects as go
+import plotly.express as px
 
 import utils.dash_reusable_components as drc
+import utils.mathutils as mu
 
 import os
 import sys
@@ -30,6 +33,7 @@ server = app.server
 
 title_text = "Data Exploration Viewer"
 default_page_size = 25 # Default number of table rows to display
+max_num_bars = 50 # The maximum number of bars to display on the bar plots
 
 # Use these to track current application state
 full_data_path = None
@@ -125,9 +129,6 @@ def table_type(df_column, col_name=None):
         else:
             t = 'any'
 
-    if col_name is not None:
-        print("\nCOLUMN: ", col_name, " HAS PANDAS DTYPE: ", df_column.dtype)
-        print("COLUMN ", col_name, " COERCED TO DASH DTYPE: ", t)
 
     return t
 
@@ -140,6 +141,10 @@ def read_df(path, dtype_dict=None, col_order=None):
         df = pd.read_csv(path, sep=",", encoding='Latin-1')
     elif(path.endswith('.xls') or path.endswith('.xlsm') or path.endswith('.xlsx')):
         df = pd.read_excel(path)
+
+    # REMOVE UNNAMED COLUMNS
+    df = df[[c for c in df.columns if not c.lower().startswith("unnamed")]]
+
 
     if dtype_dict is None:
         warn("READING WITHOUT DTYPES ---" + str(path))
@@ -300,7 +305,7 @@ app.layout = html.Div(
                                             name="Max Number Plot Bars",
                                             id="max-plot-bars",
                                             min=0,
-                                            max=50,
+                                            max=max_num_bars,
                                             value=10,
                                             step=1,
                                             marks={
@@ -680,28 +685,50 @@ def update_graphs(rows, derived_virtual_selected_rows, path, file, group_by, agg
         colors = ['#7FDBFF' if i in derived_virtual_selected_rows else '#0074D9'
                   for i in range(len(dff))]
 
-        graph = [
-            dcc.Graph(
-                id=column,
-                figure={
-                    "data": [
-                        {
-                            "x": dff[chart_x_column][:max_plot_bars],
-                            "y": dff[column][:max_plot_bars],
-                            "type": "bar",
-                            "marker": {"color": colors},
-                        }
-                    ],
-                    "layout": {
-                        "xaxis": {"automargin": True},
-                        "yaxis": {
-                            "automargin": True,
-                            "title": {"text": column}
-                        },
-                        "height": 250,
-                        "margin": {"t": 10, "l": 10, "r": 10},
-                    },
-                },
+        figs = []
+
+        graphs = [
+            html.Div(
+                dcc.Graph(
+                    id=column,
+                    # figure={
+                    #     "data": [
+                    #         {
+                    #             "x": dff[chart_x_column][:max_plot_bars],
+                    #             "y": dff[column][:max_plot_bars],
+                    #             "type": "bar",
+                    #             "marker": {"color": colors},
+                    #         }
+                    #     ],
+                    #     "layout": {
+                    #         "xaxis": {"automargin": True},
+                    #         "yaxis": {
+                    #             "automargin": True,
+                    #             "title": {"text": column}
+                    #         },
+                    #         "height": 250,
+                    #         "margin": {"t": 100, "l": 10, "r": 10},
+                    #     },
+                    # },
+                    figure=go.Figure(
+                        data=px.bar(
+                            pd.DataFrame.from_dict(
+                                                        {
+                                                            chart_x_column: dff[chart_x_column][:max_plot_bars],
+                                                            column: dff[column][:max_plot_bars]
+                                                        }
+                                                   ),
+                            x=chart_x_column,
+                            y=column,
+                            #x=dff[chart_x_column][:max_plot_bars],
+                            #y=dff[column][:max_plot_bars],
+                            #width=[0.8, 0.8, 0.8, 3.5, 4] # customize width here,
+                            color_discrete_sequence=colors[:max_plot_bars],
+                            title=column
+                        )
+                    )
+                ),
+                style={'marginBottom': 50, 'marginTop': 25}
             )
             # check if column exists - user may have deleted it
             # If `column.deletable=False`, then you don't
@@ -713,13 +740,29 @@ def update_graphs(rows, derived_virtual_selected_rows, path, file, group_by, agg
             column not in group_by
         ]
 
+        for fig in [g.children.figure for g in graphs]:
+            #print(type(fig))
+            fig.update_layout({
+                'plot_bgcolor': 'rgba(0, 0, 0, 0)',
+                'paper_bgcolor': 'rgba(0, 0, 0, 0)',
+                'font_family': "Arial",
+                'font_color': "#a5b1cd",
+                'font_size': 20,
+                'title_font_color': "#a5b1cd",
+                'legend_title_font_color': "#a5b1cd"
+            },
+            xaxis={'tickfont': {'size': mu.lerp(16, 12, min(len(dff), max_plot_bars)/max_num_bars)}},
+            title={'x': 0.5, 'xanchor': 'center'}
+            )
+
     except Exception as e:
         print("\n\n\n")
         warn(str(e))
+        raise e
         print("\n\n\n")
-        graph = []
+        graphs = []
 
-    return graph
+    return graphs
 
 
 
