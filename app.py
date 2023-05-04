@@ -116,21 +116,17 @@ def table_type(df_column, col_name=None):
     t = 'any'
 
     if sys.version_info < (3, 0):  # Pandas 1.0.0 does not support Python 2
-        t = 'any'
-    else:
-        if (str(df_column.dtype).startswith('date')):
-            t = 'datetime'
-        elif (str(df_column.dtype).startswith('object') or
+        return 'any'
+    elif (str(df_column.dtype).startswith('date')):
+        return 'datetime'
+    elif (str(df_column.dtype).startswith('object') or
                 str(df_column.dtype).startswith('str')):
-            t = 'text'
-        elif (str(df_column.dtype).startswith('int') or
+        return 'text'
+    elif (str(df_column.dtype).startswith('int') or
                 str(df_column.dtype).startswith('float')):
-            t = 'numeric'
-        else:
-            t = 'any'
-
-
-    return t
+        return 'numeric'
+    else:
+        return 'any'
 
 
 
@@ -147,7 +143,7 @@ def read_df(path, dtype_dict=None, col_order=None):
 
 
     if dtype_dict is None:
-        warn("READING WITHOUT DTYPES ---" + str(path))
+        warn(f"READING WITHOUT DTYPES ---{str(path)}")
         # One last try to convert date strings to datetime
         for col in df.columns:
             if df[col].dtype == 'object':
@@ -160,25 +156,25 @@ def read_df(path, dtype_dict=None, col_order=None):
     else:
         for k, v in dtype_dict.items():
             try:
-                if(v == 'string'):
+                if (v == 'string'):
                     df[k] = df[k].astype('string')
                 elif(v in ['int64', 'float64', 'int32', 'float32', 'double']):
                     df[k] = pd.to_numeric(df[k], errors='coerce')
                 elif('date' in v):
                     df[k] = pd.to_datetime(df[k], errors='coerce')
                 else:
-                    raise Exception("INVALID DTYPE GIVEN FOR COLUMN --- " + str(k))
+                    raise Exception(f"INVALID DTYPE GIVEN FOR COLUMN --- {str(k)}")
             except Exception as e:
                 warn(str(e))
 
 
-    if(col_order is None):
-        warn("READING WITHOUT COLUMN ORDERING --- " + str(path))
+    if (col_order is None):
+        warn(f"READING WITHOUT COLUMN ORDERING --- {str(path)}")
     else:
         try:
             df = df[col_order]
         except:
-            warn("COULDN'T APPLY COLUMN ORDERING --- " + str(path))
+            warn(f"COULDN'T APPLY COLUMN ORDERING --- {str(path)}")
 
     return df
 
@@ -497,25 +493,40 @@ def on_select_data(path, file, group_by, aggregation_method, rows, derived_virtu
 
     df_tmp, new_df = get_filtered_df(path, file, group_by, aggregation_method)
 
-    data_title = "Examining: " + str(file)
+    data_title = f"Examining: {str(file)}"
 
     if(new_df):
         filter_query = ""
 
 
-    if(filter_query is not None and len(filter_query) > 0):
-        data_filter_query_text = "Current Filter Query: " + str(filter_query)
+    if (filter_query is not None and len(filter_query) > 0):
+        data_filter_query_text = f"Current Filter Query: {str(filter_query)}"
     else:
         data_filter_query_text = ""
 
 
-    if(new_df):
-        output = reset_table(df_tmp, table_page_size, selected_page_size, []) + [data_title] + reset_chart_x_dropdown(df) + reset_aggregate() + [False] + [data_filter_query_text] + [filter_query]
-    else:
-        output = reset_table(df_tmp, table_page_size, selected_page_size, selected_rows=derived_virtual_selected_rows) + [data_title] + reset_chart_x_dropdown(df, group_by) + reset_aggregate(aggregation_method) + [False] + [data_filter_query_text] + [filter_query]
-
-
-    return output
+    return (
+        reset_table(df_tmp, table_page_size, selected_page_size, [])
+        + [data_title]
+        + reset_chart_x_dropdown(df)
+        + reset_aggregate()
+        + [False]
+        + [data_filter_query_text]
+        + [filter_query]
+        if new_df
+        else reset_table(
+            df_tmp,
+            table_page_size,
+            selected_page_size,
+            selected_rows=derived_virtual_selected_rows,
+        )
+        + [data_title]
+        + reset_chart_x_dropdown(df, group_by)
+        + reset_aggregate(aggregation_method)
+        + [False]
+        + [data_filter_query_text]
+        + [filter_query]
+    )
 
 
 
@@ -607,26 +618,29 @@ def get_filtered_df(path, file, group_by, aggregation_method, add_hyperlinks=Tru
     if (new_df):
         group_by = []
 
-    if (not (group_by is None or len(group_by) == 0) and
-            not (aggregation_method is None or len(aggregation_method) == 0)):
-        if (aggregation_method == "Count"):
-            df_tmp = df.groupby(by=group_by, as_index=False).size()
-        elif (aggregation_method == "Mean"):
-            df_tmp = df.groupby(by=group_by, as_index=False).mean()
-        elif (aggregation_method == "Standard Deviation"):
-            df_tmp = df.groupby(by=group_by, as_index=False).std()
-        elif (aggregation_method == "Min"):
-            df_tmp = df.groupby(by=group_by, as_index=False).min()
-        elif (aggregation_method == "Max"):
-            df_tmp = df.groupby(by=group_by, as_index=False).max()
-        elif (aggregation_method == "Variance"):
-            df_tmp = df.groupby(by=group_by, as_index=False).var()
-        elif (aggregation_method == "Sum"):
-            df_tmp = df.groupby(by=group_by, as_index=False).sum()
-    else:
+    if (
+        group_by is None
+        or len(group_by) == 0
+        or aggregation_method is None
+        or len(aggregation_method) == 0
+    ):
         df_tmp = df
 
 
+    elif (aggregation_method == "Count"):
+        df_tmp = df.groupby(by=group_by, as_index=False).size()
+    elif (aggregation_method == "Mean"):
+        df_tmp = df.groupby(by=group_by, as_index=False).mean()
+    elif (aggregation_method == "Standard Deviation"):
+        df_tmp = df.groupby(by=group_by, as_index=False).std()
+    elif (aggregation_method == "Min"):
+        df_tmp = df.groupby(by=group_by, as_index=False).min()
+    elif (aggregation_method == "Max"):
+        df_tmp = df.groupby(by=group_by, as_index=False).max()
+    elif (aggregation_method == "Variance"):
+        df_tmp = df.groupby(by=group_by, as_index=False).var()
+    elif (aggregation_method == "Sum"):
+        df_tmp = df.groupby(by=group_by, as_index=False).sum()
     return df_tmp, new_df
 
 
@@ -759,9 +773,6 @@ def update_graphs(rows, derived_virtual_selected_rows, path, file, group_by, agg
         print("\n\n\n")
         warn(str(e))
         raise e
-        print("\n\n\n")
-        graphs = []
-
     return graphs
 
 
